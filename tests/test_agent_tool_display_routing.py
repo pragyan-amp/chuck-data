@@ -101,18 +101,41 @@ class TestAgentToolDisplayRouting(unittest.TestCase):
                 cmd_def = get_command(case["tool_name"])
                 self.assertIsNotNone(cmd_def, f"Command {case['tool_name']} not found")
 
-                # Verify it has agent_display="full"
-                self.assertEqual(
-                    cmd_def.agent_display,
-                    "full",
-                    f"Command {case['tool_name']} must have agent_display='full'",
-                )
+                # Verify agent_display setting based on command type
+                if case["tool_name"] in [
+                    "list-catalogs",
+                    "list-schemas",
+                    "list-tables",
+                ]:
+                    # list-catalogs, list-schemas, and list-tables use conditional display
+                    self.assertEqual(
+                        cmd_def.agent_display,
+                        "conditional",
+                        f"Command {case['tool_name']} must have agent_display='conditional'",
+                    )
+                    # For conditional display, we need to test with display=true to see the table
+                    test_data_with_display = case["test_data"].copy()
+                    test_data_with_display["display"] = True
+                    from src.exceptions import PaginationCancelled
 
-                # Call the display method with test data - should raise PaginationCancelled
-                from src.exceptions import PaginationCancelled
+                    with self.assertRaises(PaginationCancelled):
+                        self.tui.display_tool_output(
+                            case["tool_name"], test_data_with_display
+                        )
+                else:
+                    # Other commands use full display
+                    self.assertEqual(
+                        cmd_def.agent_display,
+                        "full",
+                        f"Command {case['tool_name']} must have agent_display='full'",
+                    )
+                    # Call the display method with test data - should raise PaginationCancelled
+                    from src.exceptions import PaginationCancelled
 
-                with self.assertRaises(PaginationCancelled):
-                    self.tui.display_tool_output(case["tool_name"], case["test_data"])
+                    with self.assertRaises(PaginationCancelled):
+                        self.tui.display_tool_output(
+                            case["tool_name"], case["test_data"]
+                        )
 
                 # Verify console.print was called (indicates table display, not raw JSON)
                 mock_console.print.assert_called()
@@ -243,12 +266,17 @@ class TestAgentToolDisplayRouting(unittest.TestCase):
             f"Expected list commands changed. Found: {found_commands}, Expected: {expected_list_commands}",
         )
 
-        # Verify each has agent_display="full" (except list-warehouses which uses conditional display)
+        # Verify each has agent_display="full" (except list-warehouses, list-catalogs, list-schemas, and list-tables which use conditional display)
         for cmd_name in list_commands:
             with self.subTest(command=cmd_name):
                 cmd_def = get_command(cmd_name)
-                if cmd_name == "list-warehouses":
-                    # list-warehouses uses conditional display with display parameter
+                if cmd_name in [
+                    "list-warehouses",
+                    "list-catalogs",
+                    "list-schemas",
+                    "list-tables",
+                ]:
+                    # list-warehouses, list-catalogs, list-schemas, and list-tables use conditional display with display parameter
                     self.assertEqual(
                         cmd_def.agent_display,
                         "conditional",
@@ -309,6 +337,7 @@ class TestAgentToolDisplayRouting(unittest.TestCase):
                         ],
                         "catalog_name": "test_catalog",
                         "total_count": 2,
+                        "display": True,  # This triggers the display
                     },
                     message="Found 2 schemas",
                 )
@@ -322,7 +351,7 @@ class TestAgentToolDisplayRouting(unittest.TestCase):
                         execute_tool(
                             mock_client,
                             "list-schemas",
-                            {"catalog_name": "test_catalog"},
+                            {"catalog_name": "test_catalog", "display": True},
                             output_callback=output_callback,
                         )
 
