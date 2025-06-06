@@ -425,3 +425,209 @@ class TestTUIDisplay(unittest.TestCase):
                         case["expected"],
                         f"Row count {case['row_count']} should format to {case['expected']}, got {actual_row_count}",
                     )
+
+    def test_display_warehouses_basic(self):
+        """Test basic warehouse display functionality."""
+        # Create test warehouse data with type field logic
+        warehouse_data = {
+            "warehouses": [
+                {
+                    "id": "warehouse-123",
+                    "name": "Test Warehouse 1",
+                    "size": "XLARGE",
+                    "state": "STOPPED",
+                    "enable_serverless_compute": True,
+                    "warehouse_type": "PRO",
+                },
+                {
+                    "id": "warehouse-456",
+                    "name": "Test Warehouse 2",
+                    "size": "SMALL",
+                    "state": "RUNNING",
+                    "enable_serverless_compute": False,
+                    "warehouse_type": "PRO",
+                },
+            ],
+            "current_warehouse_id": "warehouse-123",
+        }
+
+        from src.exceptions import PaginationCancelled
+
+        with patch("src.ui.table_formatter.display_table") as mock_display_table:
+            with self.assertRaises(PaginationCancelled):
+                self.tui._display_warehouses(warehouse_data)
+
+            # Verify basic table structure was set up correctly
+            mock_display_table.assert_called_once()
+            call_args = mock_display_table.call_args.kwargs
+
+            self.assertEqual(call_args["title"], "Available SQL Warehouses")
+            self.assertEqual(
+                call_args["columns"], ["name", "id", "size", "type", "state"]
+            )
+
+            # Verify type field logic: serverless when enable_serverless_compute=true, otherwise warehouse_type
+            data = call_args["data"]
+            self.assertEqual(len(data), 2)
+            self.assertEqual(
+                data[0]["type"], "serverless"
+            )  # enable_serverless_compute=True
+            self.assertEqual(
+                data[1]["type"], "pro"
+            )  # enable_serverless_compute=False, so show warehouse_type
+
+            # Verify size and state values are lowercased
+            self.assertEqual(data[0]["size"], "xlarge")  # Original: "XLARGE"
+            self.assertEqual(data[0]["state"], "stopped")  # Original: "STOPPED"
+            self.assertEqual(data[1]["size"], "small")  # Original: "SMALL"
+            self.assertEqual(data[1]["state"], "running")  # Original: "RUNNING"
+
+    def test_display_warehouses_styling(self):
+        """Test warehouse display styling functions."""
+        warehouse_data = {
+            "warehouses": [
+                {
+                    "id": "warehouse-active",
+                    "name": "Active",
+                    "size": "SMALL",
+                    "state": "RUNNING",
+                    "enable_serverless_compute": True,
+                    "warehouse_type": "PRO",
+                },
+                {
+                    "id": "warehouse-inactive",
+                    "name": "Inactive",
+                    "size": "SMALL",
+                    "state": "STOPPED",
+                    "enable_serverless_compute": False,
+                    "warehouse_type": "PRO",
+                },
+            ],
+            "current_warehouse_id": "warehouse-active",
+        }
+
+        from src.exceptions import PaginationCancelled
+
+        with patch("src.ui.table_formatter.display_table") as mock_display_table:
+            with self.assertRaises(PaginationCancelled):
+                self.tui._display_warehouses(warehouse_data)
+
+            style_map = mock_display_table.call_args.kwargs["style_map"]
+
+            # Test ID styling for current warehouse
+            id_styler = style_map["id"]
+            self.assertEqual(id_styler("warehouse-active"), "bold green")
+            self.assertIsNone(id_styler("warehouse-inactive"))
+
+            # Test state styling
+            state_styler = style_map["state"]
+            self.assertEqual(state_styler("running"), "green")
+            self.assertEqual(state_styler("stopped"), "red")
+            self.assertEqual(state_styler("starting"), "yellow")
+
+    def test_display_warehouses_empty_list(self):
+        """Test warehouse display with empty warehouse list."""
+        warehouse_data = {"warehouses": []}
+
+        from src.exceptions import PaginationCancelled
+
+        with self.assertRaises(PaginationCancelled):
+            self.tui._display_warehouses(warehouse_data)
+
+        # Verify warning message was printed
+        print_calls = [
+            str(call[0][0]) for call in self.tui.console.print.call_args_list
+        ]
+        self.assertTrue(any("No SQL warehouses found" in msg for msg in print_calls))
+
+    def test_display_warehouses_type_conversion(self):
+        """Test that warehouse type logic works correctly."""
+        warehouse_data = {
+            "warehouses": [
+                {
+                    "id": "1",
+                    "name": "Serverless Warehouse",
+                    "size": "SMALL",
+                    "state": "STOPPED",
+                    "enable_serverless_compute": True,
+                    "warehouse_type": "PRO",
+                },
+                {
+                    "id": "2",
+                    "name": "Pro Warehouse",
+                    "size": "SMALL",
+                    "state": "STOPPED",
+                    "enable_serverless_compute": False,
+                    "warehouse_type": "PRO",
+                },
+                {
+                    "id": "3",
+                    "name": "Classic Warehouse",
+                    "size": "SMALL",
+                    "state": "STOPPED",
+                    "enable_serverless_compute": False,
+                    "warehouse_type": "CLASSIC",
+                },
+                {
+                    "id": "4",
+                    "name": "Missing Fields",
+                    "size": "SMALL",
+                    "state": "STOPPED",
+                },  # Missing both fields
+            ],
+        }
+
+        from src.exceptions import PaginationCancelled
+
+        with patch("src.ui.table_formatter.display_table") as mock_display_table:
+            with self.assertRaises(PaginationCancelled):
+                self.tui._display_warehouses(warehouse_data)
+
+            data = mock_display_table.call_args.kwargs["data"]
+
+            # Check type field logic
+            self.assertEqual(
+                data[0]["type"], "serverless"
+            )  # enable_serverless_compute=True
+            self.assertEqual(
+                data[1]["type"], "pro"
+            )  # enable_serverless_compute=False, warehouse_type="PRO"
+            self.assertEqual(
+                data[2]["type"], "classic"
+            )  # enable_serverless_compute=False, warehouse_type="CLASSIC"
+            self.assertEqual(
+                data[3]["type"], ""
+            )  # Missing both fields (warehouse_type defaults to empty string)
+
+    def test_display_warehouses_current_warehouse_message(self):
+        """Test that current warehouse message is displayed when set."""
+        warehouse_data = {
+            "warehouses": [
+                {
+                    "id": "wh-123",
+                    "name": "Test",
+                    "size": "SMALL",
+                    "state": "RUNNING",
+                    "enable_serverless_compute": False,
+                    "warehouse_type": "PRO",
+                }
+            ],
+            "current_warehouse_id": "wh-123",
+        }
+
+        from src.exceptions import PaginationCancelled
+
+        with patch("src.ui.table_formatter.display_table"):
+            with self.assertRaises(PaginationCancelled):
+                self.tui._display_warehouses(warehouse_data)
+
+        # Check current warehouse message was printed
+        print_calls = [
+            str(call[0][0]) for call in self.tui.console.print.call_args_list
+        ]
+        self.assertTrue(
+            any(
+                "Current SQL warehouse ID:" in msg and "wh-123" in msg
+                for msg in print_calls
+            )
+        )
