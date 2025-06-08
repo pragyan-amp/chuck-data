@@ -485,10 +485,8 @@ class ChuckTUI:
                 self._display_catalog_details(result.data)
             elif cmd in ["/schema", "/schema-details"]:
                 self._display_schema_details(result.data)
-            elif cmd == "/models":
-                self._display_models(result.data)
-            elif cmd == "/list-models":
-                self._display_detailed_models(result.data)
+            elif cmd in ["/models", "/list-models"]:
+                self._display_models_consolidated(result.data)
             elif cmd in ["/warehouses", "/list-warehouses"]:
                 self._display_warehouses(result.data)
             elif cmd in ["/volumes", "/list-volumes"]:
@@ -678,7 +676,7 @@ class ChuckTUI:
             self._display_schema_details(tool_result)
         elif tool_name in ["detailed-models", "list-models", "list_models", "models"]:
             if "models" in tool_result:
-                self._display_detailed_models(tool_result)
+                self._display_models_consolidated(tool_result)
             else:
                 self._display_models(tool_result)
         elif tool_name in ["list-warehouses", "list_warehouses", "warehouses"]:
@@ -1044,12 +1042,15 @@ class ChuckTUI:
 
         # Define styling function for the name to highlight active model
         def name_style(name):
-            return "bold green" if name == active_model else None
+            if active_model and (
+                name == active_model or name.startswith(active_model + " ")
+            ):
+                return "bold green"
+            return None
 
         # Process model names to add recommended tag
         for model in processed_models:
             if model["name"] in [
-                "databricks-meta-llama-3-3-70b-instruct",
                 "databricks-claude-3-7-sonnet",
             ]:
                 model["name"] = f"{model['name']} (recommended)"
@@ -1079,7 +1080,7 @@ class ChuckTUI:
         # This prevents agent from continuing processing after model display is complete
         raise PaginationCancelled()
 
-    def _display_detailed_models(self, data: Dict[str, Any]) -> None:
+    def _display_models_consolidated(self, data: Dict[str, Any]) -> None:
         """Display models with detailed information and filtering."""
         from chuck_data.ui.table_formatter import display_table
         from chuck_data.exceptions import PaginationCancelled
@@ -1134,6 +1135,13 @@ class ChuckTUI:
             # Add to our list
             processed_models.append(processed)
 
+        # Process model names to add recommended tag
+        for model in processed_models:
+            if model["name"] in [
+                "databricks-claude-3-7-sonnet",
+            ]:
+                model["name"] = f"{model['name']} (recommended)"
+
         # Define column styling functions
         def status_style(status):
             if status == "READY":
@@ -1146,7 +1154,9 @@ class ChuckTUI:
 
         # Define styling function for the name to highlight active model
         def name_style(name):
-            if name == active_model:
+            if active_model and (
+                name == active_model or name.startswith(active_model + " ")
+            ):
                 return "bold green"
             return "cyan"
 
@@ -1176,25 +1186,17 @@ class ChuckTUI:
             title=title,
             style_map=style_map,
             title_style=TABLE_TITLE_STYLE,
-            show_lines=False,
-            box_style="SIMPLE",
+            show_lines=True,
+            box_style="ROUNDED",
         )
 
-        # Display help instructions
-        self.console.print(
-            "\n[dim]Use [bold]/select_model <name>[/bold] to set the active model for agent operations.[/dim]"
-        )
-        if not detailed:
+        # Display current active model
+        if active_model:
             self.console.print(
-                "[dim]Use [bold]/list-models --detailed[/bold] to see more details about available models.[/dim]"
+                f"\nCurrent model: [bold green]{active_model}[/bold green]"
             )
-        if not filter_text:
-            self.console.print(
-                "[dim]Use [bold]/list-models --filter <text>[/bold] to filter models by name.[/dim]"
-            )
-        self.console.print(
-            "[dim]Use [bold]/models[/bold] for a simpler view of available models.[/dim]"
-        )
+        else:
+            self.console.print("\nCurrent model: [dim]None[/dim]")
 
         # Raise PaginationCancelled to return to chuck > prompt immediately
         # This prevents agent from continuing processing after detailed model display is complete
