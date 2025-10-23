@@ -19,6 +19,8 @@ class LLMProviderFactory:
     4. Default: "databricks"
     """
 
+    _SUPPORTED_PROVIDERS = ["databricks", "aws_bedrock", "openai", "anthropic", "mock"]
+
     @staticmethod
     def create(provider_name: Optional[str] = None) -> LLMProvider:
         """Create LLM provider instance.
@@ -126,12 +128,12 @@ class LLMProviderFactory:
             return MockProvider(**config)
 
         else:
-            supported = ["databricks", "aws_bedrock", "openai", "anthropic", "mock"]
             raise ValueError(
-                f"Unknown provider '{provider_name}'. Supported: {', '.join(supported)}"
+                f"Unknown provider '{provider_name}'. "
+                f"Supported: {', '.join(LLMProviderFactory._SUPPORTED_PROVIDERS)}"
             )
 
     @staticmethod
     def get_available_providers() -> list:
         """Get list of supported provider names."""
-        return ["databricks", "aws_bedrock", "openai", "anthropic", "mock"]
+        return LLMProviderFactory._SUPPORTED_PROVIDERS.copy()
