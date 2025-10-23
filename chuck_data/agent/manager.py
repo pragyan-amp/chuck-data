@@ -19,9 +19,27 @@ from .prompts import (
 
 
 class AgentManager:
-    def __init__(self, client, model=None, tool_output_callback=None, llm_client=None):
+    def __init__(
+        self,
+        client,
+        model=None,
+        tool_output_callback=None,
+        llm_client=None,
+        llm_provider=None,
+    ):
+        """Initialize AgentManager.
+
+        Args:
+            client: Databricks API client
+            model: Optional model override
+            tool_output_callback: Optional callback for tool execution updates
+            llm_client: Optional LLMClient instance (backward compatibility)
+            llm_provider: Optional LLM provider instance (new approach)
+        """
         self.api_client = client
-        self.llm_client = llm_client or LLMClient()
+        # Support both llm_provider (new) and llm_client (backward compat)
+        # Both have the same chat() interface
+        self.llm_client = llm_provider or llm_client or LLMClient()
         self.model = model
         self.tool_output_callback = tool_output_callback
         self.conversation_history = [

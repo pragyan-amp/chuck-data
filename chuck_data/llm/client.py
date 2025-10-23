@@ -1,67 +1,49 @@
-# src/llm_client.py
-"""
-Client for communicating with Databricks-hosted LLM APIs.
+"""LLM client for backward compatibility.
+
+DEPRECATED: This client delegates to DatabricksProvider via the factory.
+New code should use LLMProviderFactory.create() directly.
 """
 
-from openai import OpenAI
 import logging
-from chuck_data.config import get_workspace_url
-from chuck_data.databricks_auth import get_databricks_token
+from chuck_data.llm.providers.databricks import DatabricksProvider
 
-logging.getLogger("openai").setLevel(logging.ERROR)
-logging.getLogger("httpx").setLevel(logging.ERROR)
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
-    def __init__(self):
-        """
-        Initialize the LLM client.
-        Args:
-            client: Optional pre-configured OpenAI client
-        """
-        # Get token from config or environment
-        try:
-            self.databricks_token = get_databricks_token()
-        except Exception as e:
-            logging.error(f"Error getting Databricks token for LLM client: {e}")
-            self.databricks_token = None
+    """Backward-compatible LLM client.
 
-        self.base_url = get_workspace_url()
+    Maintains existing interface while delegating to DatabricksProvider.
+    This allows existing code to continue working without changes.
+
+    For new code, prefer:
+        from chuck_data.llm.factory import LLMProviderFactory
+        provider = LLMProviderFactory.create()
+    """
+
+    def __init__(self):
+        """Initialize LLM client with Databricks provider."""
+        self._provider = DatabricksProvider()
 
     def chat(self, messages, model=None, tools=None, stream=False, tool_choice="auto"):
-        """
-        Send a chat request to the model.
+        """Send chat request to LLM.
+
+        Delegates to DatabricksProvider for backward compatibility.
+
         Args:
             messages: List of message objects
             model: Model to use (default from config)
             tools: List of tools to provide
             stream: Whether to stream the response
+            tool_choice: "auto", "required", or "none"
+
         Returns:
             Response from the API
         """
-        # Get active model from config if not specified
-        if not model:
-            try:
-                from chuck_data.config import get_active_model
-
-                model = get_active_model()
-            except ImportError:
-                model = None
-
-        client = OpenAI(
-            api_key=self.databricks_token,
-            base_url=f"{self.base_url}/serving-endpoints",
+        return self._provider.chat(
+            messages=messages,
+            model=model,
+            tools=tools,
+            stream=stream,
+            tool_choice=tool_choice,
         )
-        if tools:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                tools=tools,
-                stream=stream,
-                tool_choice=tool_choice,
-            )
-        else:
-            response = client.chat.completions.create(
-                model=model, messages=messages, stream=stream
-            )
-        return response
